@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { X, Send, AlertCircle, UploadCloud, FileText, CheckCircle2, Loader2, Paperclip, Trash2 } from 'lucide-react';
@@ -13,6 +13,20 @@ export const RequestSubmissionModal = ({ workflow, isOpen, onClose, onSuccess })
   const [uploadingFields, setUploadingFields] = useState({});
   const [error, setError] = useState('');
   const submitWorkflow = useSubmitWorkflow();
+
+  useEffect(() => {
+    if (!isOpen || !workflow?.formSchema) {
+      setFormData({});
+      return;
+    }
+    const defaults = {};
+    for (const field of workflow.formSchema) {
+      if (field.defaultValue !== undefined && field.defaultValue !== null && field.defaultValue !== '') {
+        defaults[field.fieldKey] = field.defaultValue;
+      }
+    }
+    setFormData(defaults);
+  }, [isOpen, workflow]);
 
   if (!isOpen || !workflow) return null;
 

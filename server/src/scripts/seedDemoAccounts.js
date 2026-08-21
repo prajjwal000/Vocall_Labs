@@ -186,12 +186,14 @@ const seedRichDemoData = async () => {
 
     let acmeManagerRole = await Role.findOne({ organizationId: acmeOrg._id, key: 'manager' });
     const managerPermissions = [
-      'employees.read', 'employees.update',
+      'employees.read', 'employees.create', 'employees.update',
       'departments.read',
       'workflows.read', 'workflows.create', 'workflows.update',
       'requests.read', 'requests.create', 'requests.update', 'requests.cancel',
       'approvals.read', 'approvals.approve', 'approvals.reject',
-      'forms.read', 'support.read',
+      'tasks.read', 'tasks.create', 'tasks.update', 'tasks.complete', 'tasks.delegate', 'tasks.cancel',
+      'forms.read',
+      'support.read', 'support.create', 'support.update',
     ];
     if (!acmeManagerRole) {
       acmeManagerRole = await Role.create({

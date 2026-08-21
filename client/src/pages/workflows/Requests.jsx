@@ -4,7 +4,7 @@ import { usePermissions } from '../../hooks/usePermissions';
 import WorkflowProgressTracker from '../../components/workflows/WorkflowProgressTracker';
 import NewRequestModal from '../../components/workflows/NewRequestModal';
 import { useNavigate } from 'react-router-dom';
-import { Plus, FileText, Send, Sparkles } from 'lucide-react';
+import { Plus, FileText, Send, Sparkles, Paperclip, ExternalLink } from 'lucide-react';
 
 const Requests = () => {
   const [activeTab, setActiveTab] = useState('');
@@ -230,12 +230,28 @@ const Requests = () => {
               <div className="space-y-2 pt-2 border-t border-slate-100">
                 <div className="text-xs font-bold text-slate-800">Submitted Parameters:</div>
                 <div className="bg-slate-50 rounded-xl p-4 divide-y divide-slate-100 space-y-2 text-xs">
-                  {Object.entries(selectedRequest.formData || {}).map(([k, v]) => (
-                    <div key={k} className="pt-2 first:pt-0 flex justify-between gap-4">
-                      <span className="font-semibold text-slate-500 capitalize">{k}:</span>
-                      <span className="font-bold text-slate-900">{String(v)}</span>
-                    </div>
-                  ))}
+                  {Object.entries(selectedRequest.formData || {}).map(([k, v]) => {
+                    const isFile = typeof v === 'object' && v !== null && v.url;
+                    return (
+                      <div key={k} className="pt-2 first:pt-0 flex items-center justify-between gap-4">
+                        <span className="font-semibold text-slate-500 capitalize">{k}:</span>
+                        {isFile ? (
+                          <a
+                            href={v.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 text-xs font-bold transition-colors cursor-pointer"
+                          >
+                            <Paperclip className="w-3.5 h-3.5" />
+                            <span className="truncate max-w-[150px]">{v.fileName || 'View Attachment'}</span>
+                            <ExternalLink className="w-3 h-3 ml-0.5" />
+                          </a>
+                        ) : (
+                          <span className="font-bold text-slate-900 text-right">{String(v)}</span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>

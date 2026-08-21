@@ -1,6 +1,21 @@
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const Organization = require('../models/Organization');
+
+/**
+ * Creates an S3 client from an organization's storage config
+ */
+const createS3Client = (s3Config) => {
+  return new S3Client({
+    region: s3Config.region || 'us-east-1',
+    credentials: {
+      accessKeyId: s3Config.accessKeyId,
+      secretAccessKey: s3Config.secretAccessKey,
+    },
+  });
+};
 
 /**
  * Validates Cloud Storage (AWS S3 / Azure Blob / Local) credentials & connectivity
@@ -121,7 +136,8 @@ const validateStorageConnection = async ({ provider = 's3', s3 = {}, azure = {} 
 };
 
 /**
- * Stores uploaded file with organization tenant isolation
+ * Stores uploaded file with organization tenant isolation.
+ * Routes to S3 if the org has S3 configured, otherwise saves locally.
  */
 const saveUploadedFile = async ({ file, organizationId }) => {
   if (!file) {
@@ -130,20 +146,83 @@ const saveUploadedFile = async ({ file, organizationId }) => {
     throw error;
   }
 
+  const timestamp = Date.now();
+  const safeName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+  const filename = `${timestamp}-${safeName}`;
+
+  // Resolve the file buffer
+  let fileBuffer;
+  if (file.buffer) {
+    fileBuffer = file.buffer;
+  } else if (file.path && fs.existsSync(file.path)) {
+    fileBuffer = fs.readFileSync(file.path);
+  } else {
+    const error = new Error('No readable file data found.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // Check org storage config to decide provider
+  let provider = 'local';
+  let s3Config = null;
+
+  try {
+    const org = await Organization.findById(organizationId).select('settings.storageConfig');
+    const storageConfig = org?.settings?.storageConfig;
+    if (storageConfig?.provider === 's3' && storageConfig?.s3?.bucket && storageConfig?.s3?.accessKeyId) {
+      provider = 's3';
+      s3Config = storageConfig.s3;
+    }
+  } catch (err) {
+    // Org lookup failed — fall back to local
+  }
+
+  if (provider === 's3' && s3Config) {
+    // Upload to S3
+    const s3Key = `uploads/${organizationId}/${filename}`;
+    const s3Client = createS3Client(s3Config);
+
+    await s3Client.send(new PutObjectCommand({
+      Bucket: s3Config.bucket,
+      Key: s3Key,
+      Body: fileBuffer,
+      ContentType: file.mimetype || 'application/octet-stream',
+      Metadata: {
+        originalName: file.originalname,
+        organizationId: organizationId.toString(),
+      },
+    }));
+
+    const region = s3Config.region || 'us-east-1';
+    const publicUrl = `https://${s3Config.bucket}.s3.${region}.amazonaws.com/${s3Key}`;
+
+    // Clean up temp file if it exists
+    if (file.path && fs.existsSync(file.path)) {
+      fs.unlinkSync(file.path);
+    }
+
+    return {
+      url: publicUrl,
+      fileName: file.originalname,
+      storedName: filename,
+      fileSize: file.size,
+      mimeType: file.mimetype,
+      uploadedAt: new Date(),
+    };
+  }
+
+  // Local fallback
   const orgFolder = path.join(__dirname, '../../uploads', organizationId.toString());
   if (!fs.existsSync(orgFolder)) {
     fs.mkdirSync(orgFolder, { recursive: true });
   }
 
-  const timestamp = Date.now();
-  const safeName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
-  const filename = `${timestamp}-${safeName}`;
   const targetPath = path.join(orgFolder, filename);
 
   if (file.path && fs.existsSync(file.path)) {
     fs.renameSync(file.path, targetPath);
-  } else if (file.buffer) {
-    fs.writeFileSync(targetPath, file.buffer);
+  } else if (fileBuffer) {
+    fs.writeFileSync(targetPath, fileBuffer);
   }
 
   const relativeUrl = `/uploads/${organizationId}/${filename}`;

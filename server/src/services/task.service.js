@@ -244,9 +244,9 @@ const completeTask = async ({ organizationId, taskId, userId, userRole, isOwner,
     throw error;
   }
 
-  // Verification: only currentAssignee (or admin/owner override) can complete
+  // Verification: only currentAssignee (or admin/owner/manager override) can complete
   const isCurrentOwner = task.currentAssignee._id.toString() === userId.toString();
-  const canOverride = isOwner || userRole === 'owner' || userRole === 'admin';
+  const canOverride = isOwner || userRole === 'owner' || userRole === 'admin' || userRole === 'manager';
 
   if (!isCurrentOwner && !canOverride) {
     const currentOwnerName = `${task.currentAssignee.firstName} ${task.currentAssignee.lastName}`;
@@ -338,9 +338,9 @@ const delegateTask = async ({ organizationId, taskId, userId, userRole, isOwner,
     throw error;
   }
 
-  // Verification: only currentAssignee (or admin/owner) can delegate
+  // Verification: only currentAssignee (or admin/owner/manager override) can delegate
   const isCurrentOwner = task.currentAssignee._id.toString() === userId.toString();
-  const canOverride = isOwner || userRole === 'owner' || userRole === 'admin';
+  const canOverride = isOwner || userRole === 'owner' || userRole === 'admin' || userRole === 'manager';
 
   if (!isCurrentOwner && !canOverride) {
     const currentOwnerName = `${task.currentAssignee.firstName} ${task.currentAssignee.lastName}`;
@@ -480,9 +480,9 @@ const cancelTask = async ({ organizationId, taskId, userId, userRole, isOwner, u
     throw error;
   }
 
-  // Authorization: Assigner or admin/owner
+  // Authorization: Assigner or admin/owner/manager
   const isAssigner = task.assignedBy.toString() === userId.toString();
-  const canOverride = isOwner || userRole === 'owner' || userRole === 'admin';
+  const canOverride = isOwner || userRole === 'owner' || userRole === 'admin' || userRole === 'manager';
 
   if (!isAssigner && !canOverride) {
     const error = new Error('Only the task creator or an administrator can cancel this task');
@@ -590,7 +590,15 @@ const getTaskDashboardStats = async ({ organizationId, userId, userRole, isOwner
     Task.countDocuments({ organizationId, assignedBy: userId, status: 'pending' }),
     Task.countDocuments({ organizationId, assignedBy: userId, status: 'in_progress' }),
     Task.countDocuments({ organizationId, assignedBy: userId, status: 'completed' }),
-    Task.countDocuments({ organizationId, delegationDepth: { $gt: 0 } }),
+    Task.countDocuments({
+      organizationId,
+      delegationDepth: { $gt: 0 },
+      $or: [
+        { 'delegationHistory.from': userId },
+        { 'delegationHistory.to': userId },
+        { originalAssignee: userId, currentAssignee: { $ne: userId } },
+      ],
+    }),
     Task.countDocuments({ organizationId, status: 'pending' }),
     Task.countDocuments({ organizationId, status: 'in_progress' }),
     Task.countDocuments({ organizationId, status: 'completed' }),

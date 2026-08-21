@@ -1,7 +1,6 @@
 # Nexus
 
 Nexus is a production-ready multi-tenant SaaS platform. 
-This is Part 1 - MERN Foundation.
 
 ## Technology Stack
 - React, Vite, Tailwind CSS, Zustand, React Query
@@ -13,5 +12,6 @@ This is Part 1 - MERN Foundation.
 2. Install dependencies:
    - Backend: `cd server && npm install`
    - Frontend: `cd client && npm install`
-3. Run the backend: `cd server && npm run dev`
-4. Run the frontend: `cd client && npm run dev`
+3. Run seed on backend: `cd server && npm run seed:demo`
+4. Run the backend: `cd server && npm run dev`
+5. Run the frontend: `cd client && npm run dev`

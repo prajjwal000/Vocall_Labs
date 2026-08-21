@@ -44,11 +44,21 @@ export const NewRequestModal = ({ isOpen, onClose, onSuccess }) => {
     }
   }, [workflows, selectedWorkflowId]);
 
-  // Reset form data when switching workflow
+  // Reset form data when switching workflow, seeding default values
   useEffect(() => {
-    setFormData({});
     setError('');
-  }, [selectedWorkflowId]);
+    if (!activeWorkflow?.formSchema) {
+      setFormData({});
+      return;
+    }
+    const defaults = {};
+    for (const field of activeWorkflow.formSchema) {
+      if (field.defaultValue !== undefined && field.defaultValue !== null && field.defaultValue !== '') {
+        defaults[field.fieldKey] = field.defaultValue;
+      }
+    }
+    setFormData(defaults);
+  }, [selectedWorkflowId, activeWorkflow]);
 
   if (!isOpen) return null;
 
