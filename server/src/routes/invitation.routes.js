@@ -2,6 +2,7 @@ const express = require('express');
 const invitationController = require('../controllers/invitation.controller');
 const { authenticate, optionalAuthenticate } = require('../middleware/authMiddleware');
 const { requireOrganizationMembership } = require('../middleware/requireOrganizationMembership');
+const { requirePermission } = require('../middleware/requirePermission');
 
 // Public / Token routes
 const publicRouter = express.Router();
@@ -15,10 +16,10 @@ const orgInvitationRouter = express.Router({ mergeParams: true });
 orgInvitationRouter.use(authenticate);
 orgInvitationRouter.use(requireOrganizationMembership);
 
-orgInvitationRouter.post('/', invitationController.createInvitation);
+orgInvitationRouter.post('/', requirePermission('invitations.create'), invitationController.createInvitation);
 orgInvitationRouter.get('/', invitationController.getOrganizationInvitations);
-orgInvitationRouter.post('/:invitationId/resend', invitationController.resendInvitation);
-orgInvitationRouter.delete('/:invitationId', invitationController.revokeInvitation);
+orgInvitationRouter.post('/:invitationId/resend', requirePermission('invitations.manage'), invitationController.resendInvitation);
+orgInvitationRouter.delete('/:invitationId', requirePermission('invitations.manage'), invitationController.revokeInvitation);
 
 module.exports = {
   publicRouter,

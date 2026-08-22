@@ -7,10 +7,11 @@ const { setAuthCookie } = require('../utils/cookie');
  */
 const createInvitation = async (req, res, next) => {
   try {
-    const { email } = req.body;
+    const { email, roleKey } = req.body;
     const invitation = await invitationService.createInvitation({
       organizationId: req.organization._id,
       email,
+      roleKey,
       inviterUser: req.user,
       userRole: req.userRole,
     });

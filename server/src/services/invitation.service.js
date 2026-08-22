@@ -15,7 +15,7 @@ const SESSION_DURATION_MS = 24 * 60 * 60 * 1000; // 1 day
 /**
  * Creates a new organization employee invitation
  */
-const createInvitation = async ({ organizationId, email, inviterUser, userRole }) => {
+const createInvitation = async ({ organizationId, email, roleKey, inviterUser, userRole }) => {
   if (userRole !== 'owner' && userRole !== 'admin') {
     const error = new Error('Only organization owners and admins can invite members');
     error.statusCode = 403;
@@ -94,6 +94,20 @@ const createInvitation = async ({ organizationId, email, inviterUser, userRole }
     throw error;
   }
 
+  // Validate the requested role exists in this organization
+  const assignedRoleKey = roleKey && typeof roleKey === 'string' ? roleKey.trim() : 'member';
+  const roleDoc = await Role.findOne({
+    organizationId,
+    key: assignedRoleKey,
+  });
+  if (!roleDoc) {
+    const error = new Error(`Role "${assignedRoleKey}" not found in this organization`);
+    error.statusCode = 400;
+    error.code = 'INVALID_ROLE';
+    throw error;
+  }
+  const assignedRoleName = roleDoc.name || assignedRoleKey;
+
   // Generate cryptographically secure token and SHA-256 hash
   const rawToken = crypto.randomBytes(32).toString('hex');
   const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
@@ -106,6 +120,8 @@ const createInvitation = async ({ organizationId, email, inviterUser, userRole }
     email: normalizedEmail,
     invitedBy: inviterUser._id,
     tokenHash,
+    roleKey: assignedRoleKey,
+    roleName: assignedRoleName,
     status: 'pending',
     expiresAt,
   });
@@ -118,6 +134,7 @@ const createInvitation = async ({ organizationId, email, inviterUser, userRole }
       inviterName: `${inviterUser.firstName} ${inviterUser.lastName}`,
       rawToken,
       expiresAt,
+      smtpConfig: organization.settings?.smtpConfig,
     });
   } catch (err) {
     console.error('Error sending invitation email:', err);
@@ -180,6 +197,8 @@ const getOrganizationInvitations = async ({
       email: inv.email,
       status: inv.status,
       invitedBy: inv.invitedBy,
+      roleKey: inv.roleKey || 'member',
+      roleName: inv.roleName || 'Member',
       expiresAt: inv.expiresAt,
       acceptedAt: inv.acceptedAt,
       revokedAt: inv.revokedAt,
@@ -246,6 +265,7 @@ const resendInvitation = async ({ organizationId, invitationId, inviterUser, use
       inviterName: `${inviterUser.firstName} ${inviterUser.lastName}`,
       rawToken,
       expiresAt,
+      smtpConfig: organization.settings?.smtpConfig,
     });
   } catch (err) {
     console.error('Error resending invitation email:', err);
@@ -491,10 +511,12 @@ const acceptInvitation = async ({
       user = newUser;
     }
 
-    // Look up default member role for the organization
-    const defaultMemberRole = await Role.findOne({
+    // Look up the role from the invitation (not hardcoded 'member')
+    const assignedRoleKey = invitation.roleKey || 'member';
+    const assignedRoleName = invitation.roleName || 'Member';
+    const memberRole = await Role.findOne({
       organizationId: organization._id,
-      key: 'member',
+      key: assignedRoleKey,
     }).session(session || null);
 
     // Create or activate organization membership
@@ -509,8 +531,8 @@ const acceptInvitation = async ({
 
     if (existingMember) {
       existingMember.status = 'active';
-      existingMember.role = 'member';
-      if (defaultMemberRole) existingMember.roleId = defaultMemberRole._id;
+      existingMember.role = assignedRoleKey;
+      if (memberRole) existingMember.roleId = memberRole._id;
       await existingMember.save(session ? { session } : {});
     } else {
       await OrganizationMember.create(
@@ -518,8 +540,8 @@ const acceptInvitation = async ({
           {
             organizationId: organization._id,
             userId: user._id,
-            roleId: defaultMemberRole?._id,
-            role: 'member',
+            roleId: memberRole?._id,
+            role: assignedRoleKey,
             status: 'active',
             joinedAt: new Date(),
           },
@@ -566,7 +588,7 @@ const acceptInvitation = async ({
         id: organization._id.toString(),
         name: organization.name,
         slug: organization.slug,
-        role: 'member',
+        role: assignedRoleKey,
       },
       token,
     };

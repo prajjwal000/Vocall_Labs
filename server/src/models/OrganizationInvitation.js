@@ -36,6 +36,16 @@ const organizationInvitationSchema = new mongoose.Schema(
       default: 'pending',
       index: true,
     },
+    roleKey: {
+      type: String,
+      default: 'member',
+      trim: true,
+    },
+    roleName: {
+      type: String,
+      default: 'Member',
+      trim: true,
+    },
     expiresAt: {
       type: Date,
       required: true,

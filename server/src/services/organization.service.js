@@ -154,6 +154,7 @@ const updateOrganization = async ({ organization, userRole, updateData }) => {
     allowedEmailDomains,
     aiConfig,
     storageConfig,
+    smtpConfig,
   } = updateData;
 
   if (name !== undefined) {
@@ -225,6 +226,24 @@ const updateOrganization = async ({ organization, userRole, updateData }) => {
         containerName: storageConfig.azure?.containerName ? storageConfig.azure.containerName.trim() : '',
       },
       isConfigured: Boolean(storageConfig.isConfigured || isS3Configured || isAzureConfigured || isLocalConfigured),
+    };
+  }
+  if (smtpConfig !== undefined) {
+    currentSettings.smtpConfig = {
+      host: smtpConfig.host ? smtpConfig.host.trim() : '',
+      port: parseInt(smtpConfig.port, 10) || 587,
+      username: smtpConfig.username ? smtpConfig.username.trim() : '',
+      password: smtpConfig.password ? smtpConfig.password.trim() : '',
+      encryption: ['tls', 'ssl', 'none'].includes(smtpConfig.encryption) ? smtpConfig.encryption : 'tls',
+      fromEmail: smtpConfig.fromEmail ? smtpConfig.fromEmail.trim() : '',
+      fromName: smtpConfig.fromName ? smtpConfig.fromName.trim() : '',
+      isConfigured: Boolean(
+        smtpConfig.isConfigured &&
+        smtpConfig.host &&
+        smtpConfig.host.trim() &&
+        smtpConfig.fromEmail &&
+        smtpConfig.fromEmail.trim()
+      ),
     };
   }
   organization.settings = currentSettings;

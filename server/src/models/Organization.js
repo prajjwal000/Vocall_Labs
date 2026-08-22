@@ -108,6 +108,23 @@ const organizationSchema = new mongoose.Schema(
           default: false,
         },
       },
+      smtpConfig: {
+        host: { type: String, default: '' },
+        port: { type: Number, default: 587 },
+        username: { type: String, default: '' },
+        password: { type: String, default: '' },
+        encryption: {
+          type: String,
+          enum: ['tls', 'ssl', 'none'],
+          default: 'tls',
+        },
+        fromEmail: { type: String, default: '' },
+        fromName: { type: String, default: '' },
+        isConfigured: {
+          type: Boolean,
+          default: false,
+        },
+      },
     },
     plan: {
       type: String,

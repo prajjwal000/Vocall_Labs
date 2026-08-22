@@ -20,6 +20,7 @@ router.patch('/:organizationId', requireOrganizationMembership, organizationCont
 router.delete('/:organizationId', requireOrganizationMembership, organizationController.deleteOrganization);
 router.post('/:organizationId/ai/test', requireOrganizationMembership, organizationController.testAiConnection);
 router.post('/:organizationId/storage/test', requireOrganizationMembership, organizationController.testStorageConnection);
+router.post('/:organizationId/smtp/test', requireOrganizationMembership, organizationController.testSmtp);
 
 // Organization Invitation Sub-routes
 const { orgInvitationRouter } = require('./invitation.routes');

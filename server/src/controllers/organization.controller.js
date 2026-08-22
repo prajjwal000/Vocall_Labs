@@ -154,6 +154,48 @@ const testStorageConnection = async (req, res, next) => {
   }
 };
 
+const { testSmtpConnection, sendTestEmail } = require('../services/emailService');
+
+/**
+ * Test SMTP Email Connection
+ * POST /api/organizations/:organizationId/smtp/test
+ */
+const testSmtp = async (req, res, next) => {
+  try {
+    const { host, port, username, password, encryption, fromEmail, fromName, testEmail } = req.body;
+
+    const smtpConfig = {
+      host,
+      port: parseInt(port, 10) || 587,
+      username,
+      password,
+      encryption: encryption || 'tls',
+      fromEmail,
+      fromName,
+      isConfigured: true,
+    };
+
+    // Verify connection
+    await testSmtpConnection(smtpConfig);
+
+    // Send test email if testEmail provided
+    if (testEmail) {
+      await sendTestEmail({ smtpConfig, to: testEmail });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        message: testEmail
+          ? `SMTP connection verified. Test email sent to ${testEmail}`
+          : 'SMTP connection verified successfully',
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createOrganization,
   getUserOrganizations,
@@ -162,4 +204,5 @@ module.exports = {
   deleteOrganization,
   testAiConnection,
   testStorageConnection,
+  testSmtp,
 };

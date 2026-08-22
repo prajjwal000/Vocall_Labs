@@ -54,7 +54,7 @@ const AppLayout = () => {
         { name: 'Employees', path: '/app/employees', icon: <Users className="w-4 h-4" />, permission: 'employees.read' },
         { name: 'Departments', path: '/app/departments', icon: <Briefcase className="w-4 h-4" />, permission: 'departments.read' },
         { name: 'Org Settings', path: '/app/settings/organization', icon: <Building className="w-4 h-4" />, permission: 'settings.read' },
-        { name: 'Team Invitations', path: '/app/settings/invitations', icon: <UserPlus className="w-4 h-4" />, permission: 'roles.create' },
+        { name: 'Team Invitations', path: '/app/settings/invitations', icon: <UserPlus className="w-4 h-4" />, permission: 'invitations.create' },
         { name: 'Roles & Permissions', path: '/app/settings/roles', icon: <Shield className="w-4 h-4" />, permission: 'roles.read' },
       ],
     },

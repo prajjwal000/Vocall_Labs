@@ -1,19 +1,22 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useOrganization } from '../../hooks/useOrganization';
+import { usePermissions } from '../../hooks/usePermissions';
 import { invitationService } from '../../services/invitationService';
 import { organizationService } from '../../services/organizationService';
+import { roleService } from '../../services/roleService';
 
 const OrganizationInvitations = () => {
   const { activeOrganization, refreshOrganizations } = useOrganization();
+  const { can } = usePermissions();
   const queryClient = useQueryClient();
 
   const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRoleKey, setInviteRoleKey] = useState('member');
   const [activeTab, setActiveTab] = useState('all');
   const [statusMessage, setStatusMessage] = useState({ type: '', text: '' });
   const [newDomain, setNewDomain] = useState('');
 
-  // Domain restriction state
   const [domainEnabled, setDomainEnabled] = useState(
     activeOrganization?.settings?.domainRestrictionEnabled || false
   );
@@ -25,11 +28,26 @@ const OrganizationInvitations = () => {
   const isOwnerOrAdmin =
     activeOrganization?.role === 'owner' || activeOrganization?.role === 'admin';
 
+  const canCreate = isOwnerOrAdmin || can('invitations.create');
+  const canManage = isOwnerOrAdmin || can('invitations.manage');
+
+  // Fetch available roles
+  const { data: rolesData } = useQuery({
+    queryKey: ['roles', orgId],
+    queryFn: async () => {
+      if (!orgId) return [];
+      const res = await roleService.getOrganizationRoles(orgId);
+      return res.data || [];
+    },
+    enabled: Boolean(orgId) && canCreate,
+  });
+
+  const roles = rolesData || [];
+
   // Fetch invitations
   const {
     data: invitationsData,
     isLoading: isLoadingInvitations,
-    refetch: refetchInvitations,
   } = useQuery({
     queryKey: ['invitations', orgId, activeTab],
     queryFn: async () => {
@@ -39,17 +57,18 @@ const OrganizationInvitations = () => {
       });
       return res.data || [];
     },
-    enabled: Boolean(orgId) && isOwnerOrAdmin,
+    enabled: Boolean(orgId) && (isOwnerOrAdmin || can('invitations.create') || can('invitations.manage')),
   });
 
   const invitations = invitationsData || [];
 
   // Invite Mutation
   const inviteMutation = useMutation({
-    mutationFn: (email) => invitationService.createInvitation(orgId, { email }),
+    mutationFn: (data) => invitationService.createInvitation(orgId, data),
     onSuccess: () => {
       setStatusMessage({ type: 'success', text: `Invitation sent to ${inviteEmail}!` });
       setInviteEmail('');
+      setInviteRoleKey('member');
       queryClient.invalidateQueries({ queryKey: ['invitations', orgId] });
     },
     onError: (err) => {
@@ -128,15 +147,15 @@ const OrganizationInvitations = () => {
       setStatusMessage({ type: 'error', text: 'Please enter an email address' });
       return;
     }
-    inviteMutation.mutate(inviteEmail.trim());
+    inviteMutation.mutate({ email: inviteEmail.trim(), roleKey: inviteRoleKey });
   };
 
-  if (!isOwnerOrAdmin) {
+  if (!canCreate && !canManage) {
     return (
       <div className="max-w-4xl mx-auto py-12 text-center">
         <h2 className="text-xl font-bold text-slate-800">Access Restricted</h2>
         <p className="text-sm text-slate-500 mt-2">
-          Only organization owners and administrators can manage team invitations.
+          You don't have permission to manage team invitations.
         </p>
       </div>
     );
@@ -154,6 +173,19 @@ const OrganizationInvitations = () => {
         return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800">Revoked</span>;
       default:
         return null;
+    }
+  };
+
+  const getRoleBadge = (roleName) => {
+    switch (roleName?.toLowerCase()) {
+      case 'owner':
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">{roleName}</span>;
+      case 'admin':
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">{roleName}</span>;
+      case 'manager':
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800">{roleName}</span>;
+      default:
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">{roleName || 'Member'}</span>;
     }
   };
 
@@ -179,105 +211,127 @@ const OrganizationInvitations = () => {
       )}
 
       {/* Domain Restriction Card */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-          <div>
-            <h2 className="text-base font-semibold text-slate-900">Email Domain Restriction</h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Only permit invitations to employees with specific corporate email domains.
-            </p>
-          </div>
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              checked={domainEnabled}
-              onChange={(e) => setDomainEnabled(e.target.checked)}
-              className="sr-only peer"
-            />
-            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-          </label>
-        </div>
-
-        {domainEnabled && (
-          <div className="space-y-4 pt-2">
-            <form onSubmit={handleAddDomain} className="flex space-x-2">
+      {isOwnerOrAdmin && (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">Email Domain Restriction</h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Only permit invitations to employees with specific corporate email domains.
+              </p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
               <input
-                type="text"
-                placeholder="e.g. acme.com"
-                value={newDomain}
-                onChange={(e) => setNewDomain(e.target.value)}
-                className="flex-1 px-3.5 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                type="checkbox"
+                checked={domainEnabled}
+                onChange={(e) => setDomainEnabled(e.target.checked)}
+                className="sr-only peer"
               />
-              <button
-                type="submit"
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer"
-              >
-                Add Domain
-              </button>
-            </form>
-
-            <div className="flex flex-wrap gap-2 pt-1">
-              {allowedDomains.length === 0 ? (
-                <span className="text-xs text-slate-400 italic">No domains added. All domains will be blocked until one is specified.</span>
-              ) : (
-                allowedDomains.map((d) => (
-                  <span
-                    key={d}
-                    className="inline-flex items-center px-3 py-1 rounded-lg text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200"
-                  >
-                    @{d}
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveDomain(d)}
-                      className="ml-1.5 text-indigo-400 hover:text-indigo-600 cursor-pointer"
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))
-              )}
-            </div>
-
-            <div className="flex justify-end pt-2">
-              <button
-                type="button"
-                onClick={handleSaveDomains}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer"
-              >
-                Save Domain Rules
-              </button>
-            </div>
+              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+            </label>
           </div>
-        )}
-      </div>
+
+          {domainEnabled && (
+            <div className="space-y-4 pt-2">
+              <form onSubmit={handleAddDomain} className="flex space-x-2">
+                <input
+                  type="text"
+                  placeholder="e.g. acme.com"
+                  value={newDomain}
+                  onChange={(e) => setNewDomain(e.target.value)}
+                  className="flex-1 px-3.5 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Add Domain
+                </button>
+              </form>
+
+              <div className="flex flex-wrap gap-2 pt-1">
+                {allowedDomains.length === 0 ? (
+                  <span className="text-xs text-slate-400 italic">No domains added. All domains will be blocked until one is specified.</span>
+                ) : (
+                  allowedDomains.map((d) => (
+                    <span
+                      key={d}
+                      className="inline-flex items-center px-3 py-1 rounded-lg text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200"
+                    >
+                      @{d}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveDomain(d)}
+                        className="ml-1.5 text-indigo-400 hover:text-indigo-600 cursor-pointer"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))
+                )}
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={handleSaveDomains}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Save Domain Rules
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Invite Member Card */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
-        <div>
-          <h2 className="text-base font-semibold text-slate-900">Invite New Employee</h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            An invitation link will be dispatched to their email address.
-          </p>
-        </div>
+      {canCreate && (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900">Invite New Employee</h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              An invitation link will be dispatched to their email address.
+            </p>
+          </div>
 
-        <form onSubmit={handleInviteSubmit} className="flex flex-col sm:flex-row gap-3">
-          <input
-            type="email"
-            required
-            placeholder="colleague@company.com"
-            value={inviteEmail}
-            onChange={(e) => setInviteEmail(e.target.value)}
-            className="flex-1 px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          <button
-            type="submit"
-            disabled={inviteMutation.isPending}
-            className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow-sm focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 transition-all cursor-pointer"
-          >
-            {inviteMutation.isPending ? 'Sending...' : 'Send Invitation'}
-          </button>
-        </form>
-      </div>
+          <form onSubmit={handleInviteSubmit} className="flex flex-col sm:flex-row gap-3">
+            <input
+              type="email"
+              required
+              placeholder="colleague@company.com"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              className="flex-1 px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <select
+              value={inviteRoleKey}
+              onChange={(e) => setInviteRoleKey(e.target.value)}
+              className="px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white font-medium min-w-[140px]"
+            >
+              {roles.map((r) => (
+                <option key={r.key || r.id} value={r.key}>
+                  {r.name || r.key}
+                </option>
+              ))}
+              {roles.length === 0 && (
+                <>
+                  <option value="admin">Admin</option>
+                  <option value="manager">Manager</option>
+                  <option value="member">Member</option>
+                </>
+              )}
+            </select>
+            <button
+              type="submit"
+              disabled={inviteMutation.isPending}
+              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow-sm focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 transition-all cursor-pointer"
+            >
+              {inviteMutation.isPending ? 'Sending...' : 'Send Invitation'}
+            </button>
+          </form>
+        </div>
+      )}
 
       {/* Invitations Table */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -308,6 +362,7 @@ const OrganizationInvitations = () => {
               <tr>
                 <th className="px-6 py-3.5">Email</th>
                 <th className="px-6 py-3.5">Status</th>
+                <th className="px-6 py-3.5">Role</th>
                 <th className="px-6 py-3.5">Sent By</th>
                 <th className="px-6 py-3.5">Expires</th>
                 <th className="px-6 py-3.5 text-right">Actions</th>
@@ -316,13 +371,13 @@ const OrganizationInvitations = () => {
             <tbody className="divide-y divide-slate-100">
               {isLoadingInvitations ? (
                 <tr>
-                  <td colSpan="5" className="px-6 py-8 text-center text-xs text-slate-400">
+                  <td colSpan="6" className="px-6 py-8 text-center text-xs text-slate-400">
                     Loading invitations...
                   </td>
                 </tr>
               ) : invitations.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="px-6 py-8 text-center text-xs text-slate-400">
+                  <td colSpan="6" className="px-6 py-8 text-center text-xs text-slate-400">
                     No {activeTab !== 'all' ? activeTab : ''} invitations found.
                   </td>
                 </tr>
@@ -331,6 +386,7 @@ const OrganizationInvitations = () => {
                   <tr key={inv.id} className="hover:bg-slate-50/60 transition-colors">
                     <td className="px-6 py-4 font-medium text-slate-900">{inv.email}</td>
                     <td className="px-6 py-4">{getStatusBadge(inv.status)}</td>
+                    <td className="px-6 py-4">{getRoleBadge(inv.roleName)}</td>
                     <td className="px-6 py-4 text-xs text-slate-500">
                       {inv.invitedBy ? `${inv.invitedBy.firstName} ${inv.invitedBy.lastName}` : 'Admin'}
                     </td>
@@ -338,7 +394,7 @@ const OrganizationInvitations = () => {
                       {inv.expiresAt ? new Date(inv.expiresAt).toLocaleDateString() : '-'}
                     </td>
                     <td className="px-6 py-4 text-right space-x-2">
-                      {(inv.status === 'pending' || inv.status === 'expired') && (
+                      {canManage && (inv.status === 'pending' || inv.status === 'expired') && (
                         <button
                           onClick={() => resendMutation.mutate(inv.id)}
                           disabled={resendMutation.isPending}
@@ -347,7 +403,7 @@ const OrganizationInvitations = () => {
                           Resend
                         </button>
                       )}
-                      {inv.status === 'pending' && (
+                      {canManage && inv.status === 'pending' && (
                         <button
                           onClick={() => revokeMutation.mutate(inv.id)}
                           disabled={revokeMutation.isPending}

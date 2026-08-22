@@ -35,4 +35,9 @@ export const organizationService = {
     const response = await api.post(`/organizations/${id}/storage/test`, data);
     return response.data;
   },
+
+  async testSmtpConnection(id, data) {
+    const response = await api.post(`/organizations/${id}/smtp/test`, data);
+    return response.data;
+  },
 };

@@ -228,6 +228,22 @@ const SYSTEM_PERMISSIONS = [
     action: 'delete',
   },
 
+  // Invitations Module
+  {
+    key: 'invitations.create',
+    name: 'Send Invitations',
+    description: 'Allows sending team member invitations to join the organization',
+    module: 'invitations',
+    action: 'create',
+  },
+  {
+    key: 'invitations.manage',
+    name: 'Manage Invitations',
+    description: 'Allows resending and revoking pending invitations',
+    module: 'invitations',
+    action: 'manage',
+  },
+
   // Settings Module
   {
     key: 'settings.read',
@@ -326,6 +342,8 @@ const DEFAULT_ROLE_PERMISSIONS = {
     'support.read',
     'support.create',
     'support.update',
+    'invitations.create',
+    'invitations.manage',
     'roles.read',
     'roles.create',
     'roles.update',
@@ -353,6 +371,7 @@ const DEFAULT_ROLE_PERMISSIONS = {
     'tasks.complete',
     'tasks.delegate',
     'tasks.cancel',
+    'invitations.create',
     'forms.read',
     'support.read',
     'support.create',

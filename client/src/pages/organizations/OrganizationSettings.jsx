@@ -39,6 +39,16 @@ export const OrganizationSettings = () => {
       },
       isConfigured: false,
     },
+    smtpConfig: {
+      host: '',
+      port: 587,
+      username: '',
+      password: '',
+      encryption: 'tls',
+      fromEmail: '',
+      fromName: '',
+      isConfigured: false,
+    },
   });
 
   const [showApiKey, setShowApiKey] = useState(false);
@@ -56,6 +66,13 @@ export const OrganizationSettings = () => {
   const [storageTestResult, setStorageTestResult] = useState({ status: 'idle', message: '' });
   const [isStorageVerified, setIsStorageVerified] = useState(false);
 
+  // SMTP Testing state
+  const [isTestingSmtp, setIsTestingSmtp] = useState(false);
+  const [smtpTestResult, setSmtpTestResult] = useState({ status: 'idle', message: '' });
+  const [isSmtpVerified, setIsSmtpVerified] = useState(false);
+  const [showSmtpPassword, setShowSmtpPassword] = useState(false);
+  const [smtpTestEmail, setSmtpTestEmail] = useState('');
+
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -63,6 +80,7 @@ export const OrganizationSettings = () => {
     if (activeOrganization) {
       const currentAi = activeOrganization.settings?.aiConfig;
       const currentStorage = activeOrganization.settings?.storageConfig;
+      const currentSmtp = activeOrganization.settings?.smtpConfig;
       setFormData({
         name: activeOrganization.name || '',
         description: activeOrganization.description || '',
@@ -92,11 +110,23 @@ export const OrganizationSettings = () => {
           },
           isConfigured: Boolean(currentStorage?.isConfigured),
         },
+        smtpConfig: {
+          host: currentSmtp?.host || '',
+          port: currentSmtp?.port || 587,
+          username: currentSmtp?.username || '',
+          password: currentSmtp?.password || '',
+          encryption: currentSmtp?.encryption || 'tls',
+          fromEmail: currentSmtp?.fromEmail || '',
+          fromName: currentSmtp?.fromName || '',
+          isConfigured: Boolean(currentSmtp?.isConfigured),
+        },
       });
       setIsApiVerified(Boolean(currentAi?.isConfigured && currentAi?.apiKey));
       setIsStorageVerified(Boolean(currentStorage?.isConfigured));
+      setIsSmtpVerified(Boolean(currentSmtp?.isConfigured));
       setTestResult({ status: 'idle', message: '' });
       setStorageTestResult({ status: 'idle', message: '' });
+      setSmtpTestResult({ status: 'idle', message: '' });
     }
   }, [activeOrganization]);
 
@@ -221,6 +251,50 @@ export const OrganizationSettings = () => {
     }
   };
 
+  const handleTestSmtp = async () => {
+    if (!formData.smtpConfig.host.trim()) {
+      setSmtpTestResult({
+        status: 'error',
+        message: 'Please enter an SMTP host before testing.',
+      });
+      return;
+    }
+
+    if (!formData.smtpConfig.fromEmail.trim()) {
+      setSmtpTestResult({
+        status: 'error',
+        message: 'Please enter a "From Email" address before testing.',
+      });
+      return;
+    }
+
+    setIsTestingSmtp(true);
+    setSmtpTestResult({ status: 'idle', message: '' });
+
+    try {
+      const res = await organizationService.testSmtpConnection(activeOrganization.id, {
+        ...formData.smtpConfig,
+        testEmail: smtpTestEmail || undefined,
+      });
+
+      if (res.success) {
+        setIsSmtpVerified(true);
+        setSmtpTestResult({
+          status: 'success',
+          message: res.data?.message || 'SMTP connection verified successfully!',
+        });
+      }
+    } catch (err) {
+      setIsSmtpVerified(false);
+      setSmtpTestResult({
+        status: 'error',
+        message: err.response?.data?.message || err.message || 'Failed to connect to SMTP server',
+      });
+    } finally {
+      setIsTestingSmtp(false);
+    }
+  };
+
   const handleUpdate = async (e) => {
     e.preventDefault();
     setStatusMessage({ type: '', text: '' });
@@ -284,6 +358,14 @@ export const OrganizationSettings = () => {
           ...formData.storageConfig,
           isConfigured: Boolean(isStorageVerified || isS3Configured || isAzureConfigured || isLocalConfigured),
         },
+        smtpConfig: {
+          ...formData.smtpConfig,
+          isConfigured: Boolean(
+            isSmtpVerified &&
+            formData.smtpConfig.host.trim() &&
+            formData.smtpConfig.fromEmail.trim()
+          ),
+        },
       };
 
       const res = await organizationService.updateOrganization(activeOrganization.id, payload);
@@ -298,6 +380,7 @@ export const OrganizationSettings = () => {
             ...(returnedOrg?.settings || {}),
             aiConfig: payload.aiConfig,
             storageConfig: payload.storageConfig,
+            smtpConfig: payload.smtpConfig,
           },
         };
         useWorkspaceStore.getState().setActiveOrganization(updatedOrg);
@@ -963,6 +1046,238 @@ export const OrganizationSettings = () => {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* 5. SMTP Email Configuration */}
+          <div className="pt-6 border-t border-slate-100 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <span className="text-lg">✉️</span>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Email Delivery (SMTP Configuration)
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Configure SMTP to send real invitation and notification emails instead of console logs.
+                  </p>
+                </div>
+              </div>
+              <span
+                className={`text-[10px] px-2.5 py-1 rounded-full font-bold uppercase ${
+                  formData.smtpConfig.isConfigured
+                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                    : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                }`}
+              >
+                {formData.smtpConfig.isConfigured ? 'Configured' : 'Not Configured'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-950/60 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  SMTP Host <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  disabled={!isAdminOrOwner}
+                  placeholder="e.g. smtp.gmail.com or smtp.mailgun.org"
+                  value={formData.smtpConfig.host}
+                  onChange={(e) => {
+                    setIsSmtpVerified(false);
+                    setFormData({
+                      ...formData,
+                      smtpConfig: { ...formData.smtpConfig, host: e.target.value },
+                    });
+                  }}
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Port
+                </label>
+                <input
+                  type="number"
+                  disabled={!isAdminOrOwner}
+                  placeholder="587"
+                  value={formData.smtpConfig.port}
+                  onChange={(e) => {
+                    setIsSmtpVerified(false);
+                    setFormData({
+                      ...formData,
+                      smtpConfig: { ...formData.smtpConfig, port: parseInt(e.target.value, 10) || 587 },
+                    });
+                  }}
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Username
+                </label>
+                <input
+                  type="text"
+                  disabled={!isAdminOrOwner}
+                  placeholder="SMTP username"
+                  value={formData.smtpConfig.username}
+                  onChange={(e) => {
+                    setIsSmtpVerified(false);
+                    setFormData({
+                      ...formData,
+                      smtpConfig: { ...formData.smtpConfig, username: e.target.value },
+                    });
+                  }}
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Password
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowSmtpPassword(!showSmtpPassword)}
+                    className="text-[11px] text-indigo-600 dark:text-indigo-400 font-bold hover:underline cursor-pointer"
+                  >
+                    {showSmtpPassword ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                <input
+                  type={showSmtpPassword ? 'text' : 'password'}
+                  disabled={!isAdminOrOwner}
+                  placeholder="SMTP password or app-specific password"
+                  value={formData.smtpConfig.password}
+                  onChange={(e) => {
+                    setIsSmtpVerified(false);
+                    setFormData({
+                      ...formData,
+                      smtpConfig: { ...formData.smtpConfig, password: e.target.value },
+                    });
+                  }}
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Encryption
+                </label>
+                <select
+                  disabled={!isAdminOrOwner}
+                  value={formData.smtpConfig.encryption}
+                  onChange={(e) => {
+                    setIsSmtpVerified(false);
+                    setFormData({
+                      ...formData,
+                      smtpConfig: { ...formData.smtpConfig, encryption: e.target.value },
+                    });
+                  }}
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-white"
+                >
+                  <option value="tls">STARTTLS (Recommended, port 587)</option>
+                  <option value="ssl">SSL/TLS (port 465)</option>
+                  <option value="none">None (Unencrypted)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  From Name
+                </label>
+                <input
+                  type="text"
+                  disabled={!isAdminOrOwner}
+                  placeholder="e.g. Nexus Workspace"
+                  value={formData.smtpConfig.fromName}
+                  onChange={(e) => {
+                    setIsSmtpVerified(false);
+                    setFormData({
+                      ...formData,
+                      smtpConfig: { ...formData.smtpConfig, fromName: e.target.value },
+                    });
+                  }}
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  From Email <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  disabled={!isAdminOrOwner}
+                  placeholder="e.g. noreply@yourcompany.com"
+                  value={formData.smtpConfig.fromEmail}
+                  onChange={(e) => {
+                    setIsSmtpVerified(false);
+                    setFormData({
+                      ...formData,
+                      smtpConfig: { ...formData.smtpConfig, fromEmail: e.target.value },
+                    });
+                  }}
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
+                />
+              </div>
+
+              {/* Test SMTP Button & Result */}
+              <div className="md:col-span-2 pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-slate-200/60 dark:border-slate-800">
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    disabled={!isAdminOrOwner || isTestingSmtp || !formData.smtpConfig.host.trim() || !formData.smtpConfig.fromEmail.trim()}
+                    onClick={handleTestSmtp}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center space-x-1.5 shrink-0 disabled:opacity-50 ${
+                      isSmtpVerified
+                        ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
+                        : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs'
+                    }`}
+                  >
+                    {isTestingSmtp ? (
+                      <>
+                        <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                        <span>Testing SMTP...</span>
+                      </>
+                    ) : isSmtpVerified ? (
+                      <>
+                        <span>✓</span>
+                        <span>SMTP Verified (Click to Retest)</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>⚡</span>
+                        <span>Test SMTP Connection</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <div className="flex-1">
+                  {smtpTestResult.status === 'success' && (
+                    <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-[11px] font-semibold text-emerald-800 dark:text-emerald-300 flex items-center space-x-1.5">
+                      <span>✅</span>
+                      <span>{smtpTestResult.message}</span>
+                    </div>
+                  )}
+                  {smtpTestResult.status === 'error' && (
+                    <div className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-[11px] font-semibold text-rose-800 dark:text-rose-300 flex items-center space-x-1.5">
+                      <span>❌</span>
+                      <span>{smtpTestResult.message}</span>
+                    </div>
+                  )}
+                  {smtpTestResult.status === 'idle' && !isSmtpVerified && formData.smtpConfig.host && (
+                    <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">
+                      ⚠️ Please test the SMTP connection before saving.
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 
