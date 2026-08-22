@@ -153,6 +153,7 @@ const updateOrganization = async ({ organization, userRole, updateData }) => {
     domainRestrictionEnabled,
     allowedEmailDomains,
     aiConfig,
+    storageConfig,
   } = updateData;
 
   if (name !== undefined) {
